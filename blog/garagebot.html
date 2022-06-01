@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="I'm far too lazy to manually open the garage. Why not make a bot to do it for me?">
+    <title>garagebot - Neil's blog</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.28.0/themes/prism-okaidia.min.css" integrity="sha512-mIs9kKbaw6JZFfSuo+MovjU+Ntggfoj8RwAmJbVXQ5mkAX5LlgETQEweFPI18humSPHymTb5iikEOKWF7I8ncQ==" crossorigin="anonymous" referrerpolicy="no-referrer">
+    <link rel="stylesheet" href="../style.css">
+    <link rel="stylesheet" href="blog.css">
+</head>
+
+<body>
+    <time>May 29, 2022</time>
+    <h1>garagebot</h1>
+    <section>
+        <p>Ok, I'm not <em>as</em> lazy as the description suggests. In fact, I originally built the bot for a good reason. The garage door opener I used to use was old, clunky, and most importantly very unreliable. On several occasions I've been temporarily locked out of my own home. Eventually, it broke entirely, rendering it impossible to enter through the garage from outside.</p>
+        <p>Months have passed and my family and I switched from an old, clunky garage door opener to a slow, clunky garage door opener <em>app</em> called <a href="https://myq.com/">MyQ</a>. It's not that MyQ itself is slow, just the app was glitchy and required you to sign in every time. A lightbulb dinged in my head. <em>If it's just the app that's slow, why not create a bot to open it for me?</em> And so I embarked on my journey to figure out how to make a garage bot.</p>
+    </section>
+    <section>
+        <h2>testing options</h2>
+        <p>At first, I did some research on whether MyQ was compatible with HomeKit.</p>
+        <blockquote>
+            <p>MyQ, by design, is not compatible with Apple HomeKit. However, it can be connected using a HomeBridge hub (on Amazon)<sup><a href="https://amazon.com/LiftMaster-MYQ-819LMB-Home-Bridge/dp/B075RQVSY7/ref=sr_1_4?keywords=homebridge&qid=1653864228&sr=8-4">[here]</a></sup>…</p>
+        </blockquote>
+        <p><em lang="fr">Excuse-moi?!</em> There's no way I'm paying an additional $98 just for HomeKit to work with it.</p>
+        <p>The next thought I had was <q>surely there's a MyQ API, right?</q> Well, kinda. There is no documented <em>official</em> API, but some projects have achieved just that. A quick google led me to the project <a href="https://github.com/hjdhjd/myq">hjdhjd/myq</a> (on GitHub). The best way to automate the API-calling is the <a href="https://support.apple.com/guide/shortcuts/welcome/ios">Shortcuts</a> app. The app does come with its own shortcomings, however, namely the fact that it doesn't support JavaScript execution to invoke the API. There is a way to get around it, though. If you were to offload the whole garage-opening-API-calling thing to a server, we could then ping the server from a shortcut. And the perfect server, in this case, is <a href="https://vercel.com/">Vercel</a>.</p>
+    </section>
+    <section>
+        <h2>building the bot</h2>
+        <p>First, just to ensure the API was actually functioning, I whipped up a quick test script:</p>
+        <pre><code class="language-js">import { myQApi } from "@hjdhjd/myq"
+
+const api = new myQApi("secret@gmail.com", "$3cret#123")
+await api.refreshDevices()
+await api.execute(api.devices[0], "open")
+</code></pre>
+        <p>Sure enough, I heard the sound of the garage opening. I sat there for a few seconds with my mouth agape. I felt like I had become a hacker! Now, the next step was to write a thin wrapper on this baby and publish it with Vercel.</p>
+        <pre><code class="language-js">// [setup]
+
+export default async (req, res) => {
+    try {
+        const params = new URL(req.url, "http:.").searchParams
+        const command = params.get("command")
+        if (params.get("password") !== process.env.password)
+            return
+        await api.refreshDevices()
+        res.write(
+            (await api.execute(api.devices[0], command))
+            ? "success" : "command failed"
+        )
+    } finally { res.end() }
+}
+</code></pre>
+    <aside>
+        <p>Despite SSL encryption, never use query string authentication where it could potentially be logged by browsers! Instead, use <a href="https://en.wikipedia.org/wiki/Basic_access_authentication">Basic Auth</a>.</p>
+    </aside>
+
+    Now, navigating to <q>foobar.vercel.app/api?password=secret&command=open</q> once again opened the garage as expected. All that was left was to actually create the shortcut. This can be summed up in a few screenshots.
+    <img src="garagebot shortcut.webp" alt="a Shortcuts action that reads: get contents of URL" width="740" height="140">
+    <img src="garagebot automation.webp" alt="a Shortcuts automation that reads: when I arrive at address run shortcut" width="473" height="497">
+    </section>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.28.0/prism.min.js" integrity="sha512-RDQSW3KoqJMiX0L/UBgwBmH1EmRYp8LBOiLaA8rBHIy+7OGP/7Gxg8vbt8wG4ZYd29P0Fnoq6+LOytCqx3cyoQ==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+</body>
+
+</html>
